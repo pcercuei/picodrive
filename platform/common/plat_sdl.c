@@ -125,7 +125,8 @@ void plat_video_flip(void)
 		gl_flip(shadow_fb, g_screen_width, g_screen_height);
 	}
 	else {
-		// XXX: no locking, but should be fine with SDL_SWSURFACE?
+		if (SDL_MUSTLOCK(plat_sdl_screen))
+			SDL_UnlockSurface(plat_sdl_screen);
 		SDL_Flip(plat_sdl_screen);
 		g_screen_ptr = plat_sdl_screen->pixels;
 	}
@@ -147,7 +148,8 @@ void plat_video_menu_begin(void)
 		g_menuscreen_ptr = shadow_fb;
 	}
 	else {
-		SDL_LockSurface(plat_sdl_screen);
+		if (SDL_MUSTLOCK(plat_sdl_screen))
+			SDL_LockSurface(plat_sdl_screen);
 		g_menuscreen_ptr = plat_sdl_screen->pixels;
 	}
 }
@@ -169,7 +171,8 @@ void plat_video_menu_end(void)
 		gl_flip(g_menuscreen_ptr, g_menuscreen_w, g_menuscreen_h);
 	}
 	else {
-		SDL_UnlockSurface(plat_sdl_screen);
+		if (SDL_MUSTLOCK(plat_sdl_screen))
+			SDL_UnlockSurface(plat_sdl_screen);
 		SDL_Flip(plat_sdl_screen);
 	}
 	g_menuscreen_ptr = NULL;
@@ -188,7 +191,8 @@ void plat_video_loop_prepare(void)
 		g_screen_ptr = shadow_fb;
 	}
 	else {
-		SDL_LockSurface(plat_sdl_screen);
+		if (SDL_MUSTLOCK(plat_sdl_screen))
+			SDL_LockSurface(plat_sdl_screen);
 		g_screen_ptr = plat_sdl_screen->pixels;
 	}
 }
