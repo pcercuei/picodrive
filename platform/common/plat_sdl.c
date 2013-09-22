@@ -129,6 +129,7 @@ void plat_video_flip(void)
 			SDL_UnlockSurface(plat_sdl_screen);
 		SDL_Flip(plat_sdl_screen);
 		g_screen_ptr = plat_sdl_screen->pixels;
+		PicoDrawSetOutBuf(g_screen_ptr, g_screen_width * 2);
 	}
 }
 
@@ -195,6 +196,7 @@ void plat_video_loop_prepare(void)
 			SDL_LockSurface(plat_sdl_screen);
 		g_screen_ptr = plat_sdl_screen->pixels;
 	}
+	PicoDrawSetOutBuf(g_screen_ptr, g_screen_width * 2);
 }
 
 void plat_early_init(void)
