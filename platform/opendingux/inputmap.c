@@ -36,3 +36,20 @@ const struct menu_keymap in_sdl_key_map[] =
 	{ SDLK_TAB,	PBTN_L },
 	{ SDLK_BACKSPACE,	PBTN_R },
 };
+
+const char * const in_sdl_key_names[SDLK_LAST] = {
+	[SDLK_UP] = "UP",
+	[SDLK_DOWN] = "DOWN",
+	[SDLK_LEFT] = "LEFT",
+	[SDLK_RIGHT] = "RIGHT",
+	[SDLK_LCTRL] = "A",
+	[SDLK_LALT] = "B",
+	[SDLK_LSHIFT] = "X",
+	[SDLK_SPACE] = "Y",
+	[SDLK_TAB] = "L",
+	[SDLK_BACKSPACE] = "R",
+	[SDLK_RETURN] = "START",
+	[SDLK_ESCAPE] = "SELECT",
+	[SDLK_POWER] = "POWER",
+	[SDLK_PAUSE] = "LOCK",
+};
