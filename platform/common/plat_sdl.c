@@ -45,6 +45,42 @@ static const struct in_default_bind in_sdl_defbinds[] = {
 	{ 0, 0, 0 }
 };
 
+static const struct menu_keymap key_pbtn_map[] =
+{
+	{ SDLK_UP,	PBTN_UP },
+	{ SDLK_DOWN,	PBTN_DOWN },
+	{ SDLK_LEFT,	PBTN_LEFT },
+	{ SDLK_RIGHT,	PBTN_RIGHT },
+	{ SDLK_RETURN,	PBTN_MOK },
+	{ SDLK_ESCAPE,	PBTN_MBACK },
+	{ SDLK_SEMICOLON,    PBTN_MA2 },
+	{ SDLK_QUOTE,        PBTN_MA3 },
+	{ SDLK_BACKSLASH,    PBTN_MENU },
+	{ SDLK_LEFTBRACKET,  PBTN_L },
+	{ SDLK_RIGHTBRACKET, PBTN_R },
+};
+
+static const struct menu_keymap joybtn_pbtn_map[] =
+{
+	{ SDLK_UP,	PBTN_UP },
+	{ SDLK_DOWN,	PBTN_DOWN },
+	{ SDLK_LEFT,	PBTN_LEFT },
+	{ SDLK_RIGHT,	PBTN_RIGHT },
+	/* joystick */
+	{ SDLK_WORLD_0,	PBTN_MOK },
+	{ SDLK_WORLD_1,	PBTN_MBACK },
+	{ SDLK_WORLD_2,	PBTN_MA2 },
+	{ SDLK_WORLD_3,	PBTN_MA3 },
+};
+
+static const struct in_sdl_pdata in_sdl_platform_data = {
+	.defbinds = in_sdl_defbinds,
+	.key_map = key_pbtn_map,
+	.kmap_size = sizeof(key_pbtn_map) / sizeof(key_pbtn_map[0]),
+	.joy_map = joybtn_pbtn_map,
+	.jmap_size = sizeof(joybtn_pbtn_map) / sizeof(joybtn_pbtn_map[0]),
+};
+
 /* YUV stuff */
 static int yuv_ry[32], yuv_gy[32], yuv_by[32];
 static unsigned char yuv_u[32 * 2], yuv_v[32 * 2];
@@ -241,7 +277,7 @@ void plat_init(void)
 	g_screen_height = 240;
 	g_screen_ptr = shadow_fb;
 
-	in_sdl_init(in_sdl_defbinds, plat_sdl_event_handler);
+	in_sdl_init(&in_sdl_platform_data, plat_sdl_event_handler);
 	in_probe();
 
 	bgr_to_uyvy_init();
