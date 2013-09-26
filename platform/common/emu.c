@@ -1069,9 +1069,9 @@ static void run_events_ui(unsigned int which)
 			char tmp[64];
 			int keys, len;
 
-			strcpy(tmp, (which & PEV_STATE_LOAD) ? "LOAD STATE?" : "OVERWRITE SAVE?");
+			strcpy(tmp, (which & PEV_STATE_LOAD) ? "LOAD STATE? " : "OVERWRITE SAVE? ");
 			len = strlen(tmp);
-			nm = in_get_key_name(-1, -PBTN_MA3);
+			nm = in_get_key_name(-1, -PBTN_MOK);
 			snprintf(tmp + len, sizeof(tmp) - len, "(%s=yes, ", nm);
 			len = strlen(tmp);
 			nm = in_get_key_name(-1, -PBTN_MBACK);
