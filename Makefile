@@ -56,6 +56,10 @@ asm_cdmemory = 0
 endif
 
 # frontend
+ifeq "$(PLATFORM)" "opendingux"
+OBJS += platform/opendingux/inputmap.o
+PLATFORM := generic # OpenDingux is a generic platform, really.
+endif
 ifeq "$(PLATFORM)" "generic"
 OBJS += platform/linux/emu.o platform/linux/blit.o # FIXME
 OBJS += platform/common/plat_sdl.o

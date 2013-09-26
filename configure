@@ -31,7 +31,7 @@ check_define()
 # setting options to "yes" or "no" will make that choice default,
 # "" means "autodetect".
 
-platform_list="generic pandora gp2x"
+platform_list="generic pandora gp2x opendingux"
 platform="generic"
 sound_driver_list="oss alsa sdl"
 sound_drivers=""
@@ -67,6 +67,9 @@ set_platform()
   platform=$1
   case "$platform" in
   generic)
+    ;;
+  opendingux)
+    sound_drivers="sdl"
     ;;
   pandora)
     sound_drivers="oss alsa"
@@ -225,7 +228,7 @@ arm*)
 esac
 
 case "$platform" in
-generic)
+generic | opendingux)
   need_sdl="yes"
   ;;
 esac
