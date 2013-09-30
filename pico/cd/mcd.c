@@ -21,6 +21,7 @@ PICO_INTERNAL void PicoInitMCD(void)
 {
   SekInitS68k();
   Init_CD_Driver();
+  gfx_init();
 }
 
 PICO_INTERNAL void PicoExitMCD(void)
@@ -30,6 +31,8 @@ PICO_INTERNAL void PicoExitMCD(void)
 
 PICO_INTERNAL void PicoPowerMCD(void)
 {
+  SekCycleCntS68k = SekCycleAimS68k = 0;
+
   int fmt_size = sizeof(formatted_bram);
   memset(Pico_mcd->prg_ram,    0, sizeof(Pico_mcd->prg_ram));
   memset(Pico_mcd->word_ram2M, 0, sizeof(Pico_mcd->word_ram2M));
@@ -41,6 +44,8 @@ PICO_INTERNAL void PicoPowerMCD(void)
   memset(&Pico_mcd->pcm, 0, sizeof(Pico_mcd->pcm));
   memset(&Pico_mcd->m, 0, sizeof(Pico_mcd->m));
 
+  Reset_CD();
+
   // cold reset state (tested)
   Pico_mcd->m.state_flags = PCD_ST_S68K_RST;
   Pico_mcd->m.busreq = 2;     // busreq on, s68k in reset
@@ -48,15 +53,23 @@ PICO_INTERNAL void PicoPowerMCD(void)
   memset(Pico_mcd->bios + 0x70, 0xff, 4);
 }
 
-PICO_INTERNAL int PicoResetMCD(void)
+void pcd_soft_reset(void)
 {
-  // ??
-  Reset_CD();
+  // Reset_CD(); // breaks Fahrenheit CD swap
+
   LC89510_Reset();
-  gfx_cd_reset();
 #ifdef _ASM_CD_MEMORY_C
   //PicoMemResetCDdecode(1); // don't have to call this in 2M mode
 #endif
+
+  pcd_event_schedule_s68k(PCD_EVENT_CDC, 12500000/75);
+
+  // TODO: test if register state/timers change
+}
+
+PICO_INTERNAL int PicoResetMCD(void)
+{
+  // reset button doesn't affect MCD hardware
 
   // use SRam.data for RAM cart
   if (PicoOpt & POPT_EN_MCD_RAMCART) {
@@ -69,8 +82,6 @@ PICO_INTERNAL int PicoResetMCD(void)
   }
   SRam.start = SRam.end = 0; // unused
 
-  pcd_event_schedule(0, PCD_EVENT_CDC, 12500000/75);
-
   return 0;
 }
 
@@ -81,6 +92,9 @@ static __inline void SekRunS68k(unsigned int to)
   SekCycleAimS68k = to;
   if ((cyc_do = SekCycleAimS68k - SekCycleCntS68k) <= 0)
     return;
+
+  if (SekShouldInterrupt())
+    Pico_mcd->m.s68k_poll_a = 0;
 
   SekCycleCntS68k += cyc_do;
 #if defined(EMU_C68K)
@@ -93,11 +107,19 @@ static __inline void SekRunS68k(unsigned int to)
   m68k_set_context(&PicoCpuMM68k);
 #elif defined(EMU_F68K)
   g_m68kcontext = &PicoCpuFS68k;
-  SekCycleCntS68k += fm68k_emulate(cyc_do, 0, 0) - cyc_do;
+  SekCycleCntS68k += fm68k_emulate(cyc_do, 0) - cyc_do;
   g_m68kcontext = &PicoCpuFM68k;
 #endif
 }
 
+static void pcd_set_cycle_mult(void)
+{
+  // ~1.63 for NTSC, ~1.645 for PAL
+  if (Pico.m.pal)
+    m68k_cycle_mult = ((12500000ull << 16) / (50*312*488));
+  else
+    m68k_cycle_mult = ((12500000ull << 16) / (60*262*488)) + 1;
+}
 
 unsigned int pcd_cycles_m68k_to_s68k(unsigned int c)
 {
@@ -124,19 +146,6 @@ static void pcd_int3_timer_event(unsigned int now)
       Pico_mcd->s68k_regs[0x31] * 384);
 }
 
-static void pcd_gfx_event(unsigned int now)
-{
-  // update gfx chip
-  if (Pico_mcd->rot_comp.Reg_58 & 0x8000) {
-    Pico_mcd->rot_comp.Reg_58 &= 0x7fff;
-    Pico_mcd->rot_comp.Reg_64  = 0;
-    if (Pico_mcd->s68k_regs[0x33] & PCDS_IEN1) {
-      elprintf(EL_INTS  |EL_CD, "s68k: gfx_cd irq 1");
-      SekInterruptS68k(1);
-    }
-  }
-}
-
 static void pcd_dma_event(unsigned int now)
 {
   int ddx = Pico_mcd->s68k_regs[4] & 7;
@@ -151,7 +160,7 @@ static unsigned int event_time_next;
 static event_cb *pcd_event_cbs[PCD_EVENT_COUNT] = {
   [PCD_EVENT_CDC]      = pcd_cdc_event,
   [PCD_EVENT_TIMER3]   = pcd_int3_timer_event,
-  [PCD_EVENT_GFX]      = pcd_gfx_event,
+  [PCD_EVENT_GFX]      = gfx_update,
   [PCD_EVENT_DMA]      = pcd_dma_event,
 };
 
@@ -260,10 +269,10 @@ int pcd_sync_s68k(unsigned int m68k_target, int m68k_poll_sync)
 
 static void SekSyncM68k(void);
 
-static inline void pcd_run_cpus_normal(int m68k_cycles)
+void pcd_run_cpus_normal(int m68k_cycles)
 {
   SekCycleAim += m68k_cycles;
-  if (SekShouldInterrupt())
+  if (SekShouldInterrupt() || Pico_mcd->m.m68k_poll_cnt < 12)
     Pico_mcd->m.m68k_poll_cnt = 0;
   else if (Pico_mcd->m.m68k_poll_cnt >= 16) {
     int s68k_left = pcd_sync_s68k(SekCycleAim, 1);
@@ -279,7 +288,7 @@ static inline void pcd_run_cpus_normal(int m68k_cycles)
   SekSyncM68k();
 }
 
-static inline void pcd_run_cpus_lockstep(int m68k_cycles)
+void pcd_run_cpus_lockstep(int m68k_cycles)
 {
   unsigned int target = SekCycleAim + m68k_cycles;
   do {
@@ -303,12 +312,7 @@ PICO_INTERNAL void PicoFrameMCD(void)
   if (!(PicoOpt&POPT_ALT_RENDERER))
     PicoFrameStart();
 
-  // ~1.63 for NTSC, ~1.645 for PAL
-  if (Pico.m.pal)
-    m68k_cycle_mult = ((12500000ull << 16) / (50*312*488));
-  else
-    m68k_cycle_mult = ((12500000ull << 16) / (60*262*488)) + 1;
-
+  pcd_set_cycle_mult();
   PicoFrameHints();
 }
 
@@ -317,7 +321,13 @@ void pcd_state_loaded(void)
   unsigned int cycles;
   int diff;
 
+  pcd_set_cycle_mult();
   pcd_state_loaded_mem();
+
+  memset(Pico_mcd->pcm_mixbuf, 0, sizeof(Pico_mcd->pcm_mixbuf));
+  Pico_mcd->pcm_mixbuf_dirty = 0;
+  Pico_mcd->pcm_mixpos = 0;
+  Pico_mcd->pcm_regs_dirty = 1;
 
   // old savestates..
   cycles = pcd_cycles_m68k_to_s68k(SekCycleAim);
@@ -332,15 +342,17 @@ void pcd_state_loaded(void)
       pcd_event_schedule(SekCycleAimS68k, PCD_EVENT_TIMER3,
         Pico_mcd->s68k_regs[0x31] * 384);
 
-    if (Pico_mcd->rot_comp.Reg_58 & 0x8000) {
-      Pico_mcd->rot_comp.Reg_58 &= 0x7fff;
-      Pico_mcd->rot_comp.Reg_64  = 0;
-      if (Pico_mcd->s68k_regs[0x33] & PCDS_IEN1)
-        SekInterruptS68k(1);
-    }
     if (Pico_mcd->scd.Status_CDC & 0x08)
 	    Update_CDC_TRansfer(Pico_mcd->s68k_regs[4] & 7);
   }
+
+  diff = cycles - Pico_mcd->pcm.update_cycles;
+  if ((unsigned int)diff > 12500000/50)
+    Pico_mcd->pcm.update_cycles = cycles;
+
+  // reschedule
+  event_time_next = 0;
+  pcd_run_events(SekCycleCntS68k);
 }
 
 // vim:shiftwidth=2:ts=2:expandtab

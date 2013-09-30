@@ -61,6 +61,7 @@ void PicoExit(void)
 void PicoPower(void)
 {
   Pico.m.frame_count = 0;
+  SekCycleCnt = SekCycleAim = 0;
 
   // clear all memory of the emulated machine
   memset(&Pico.ram,0,(unsigned char *)&Pico.rom - Pico.ram);
@@ -167,15 +168,15 @@ int PicoReset(void)
   }
 
   SekReset();
+  // ..but do not reset SekCycle* to not desync with addons
+
   // s68k doesn't have the TAS quirk, so we just globally set normal TAS handler in MCD mode (used by Batman games).
   SekSetRealTAS(PicoAHW & PAHW_MCD);
-  SekCycleCnt = SekCycleAim = 0;
 
   Pico.m.dirtyPal = 1;
 
   Pico.m.z80_bank68k = 0;
   Pico.m.z80_reset = 1;
-  memset(Pico.zram, 0, sizeof(Pico.zram)); // ??
 
   PicoDetectRegion();
   Pico.video.status = 0x3428 | Pico.m.pal; // 'always set' bits | vblank | collision | pal
@@ -231,19 +232,20 @@ void PicoLoopPrepare(void)
 // same for Outrunners (92-121, when active is set to 24)
 // 96 is VR hack
 static const int dma_timings[] = {
-  96,  167, 166,  83, // vblank: 32cell: dma2vram dma2[vs|c]ram vram_fill vram_copy
+  167, 167, 166,  83, // vblank: 32cell: dma2vram dma2[vs|c]ram vram_fill vram_copy
   102, 205, 204, 102, // vblank: 40cell:
   16,   16,  15,   8, // active: 32cell:
   24,   18,  17,   9  // ...
 };
 
 static const int dma_bsycles[] = {
-  (488<<8)/96,  (488<<8)/167, (488<<8)/166, (488<<8)/83,
-  (488<<8)/102, (488<<8)/205, (488<<8)/204, (488<<8)/102,
+  (488<<8)/167, (488<<8)/167, (488<<8)/166, (488<<8)/83,
+  (488<<8)/102, (488<<8)/233, (488<<8)/204, (488<<8)/102,
   (488<<8)/16,  (488<<8)/16,  (488<<8)/15,  (488<<8)/8,
   (488<<8)/24,  (488<<8)/18,  (488<<8)/17,  (488<<8)/9
 };
 
+// grossly inaccurate.. FIXME FIXXXMEE
 PICO_INTERNAL int CheckDMA(void)
 {
   int burn = 0, xfers_can, dma_op = Pico.video.reg[0x17]>>6; // see gens for 00 and 01 modes
@@ -312,14 +314,13 @@ void PicoFrame(void)
     goto end;
   }
 
-  // TODO: MCD+32X
-  if (PicoAHW & PAHW_MCD) {
-    PicoFrameMCD();
+  if (PicoAHW & PAHW_32X) {
+    PicoFrame32x(); // also does MCD+32X
     goto end;
   }
 
-  if (PicoAHW & PAHW_32X) {
-    PicoFrame32x();
+  if (PicoAHW & PAHW_MCD) {
+    PicoFrameMCD();
     goto end;
   }
 

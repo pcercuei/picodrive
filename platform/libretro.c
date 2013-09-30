@@ -292,6 +292,8 @@ void retro_set_environment(retro_environment_t cb)
 		//{ "region", "Region; Auto|NTSC|PAL" },
 		{ "picodrive_input1", "Input device 1; 3 button pad|6 button pad|None" },
 		{ "picodrive_input2", "Input device 2; 3 button pad|6 button pad|None" },
+		{ "picodrive_sprlim", "No sprite limit; disabled|enabled" },
+		{ "picodrive_ramcart", "MegaCD RAM cart; disabled|enabled" },
 #ifdef DRC_SH2
 		{ "picodrive_drc", "Dynamic recompilers; enabled|disabled" },
 #endif
@@ -585,13 +587,13 @@ static void disk_tray_close(void)
 
 
 static const char * const biosfiles_us[] = {
-	"us_scd1_9210", "us_scd2_9306", "SegaCDBIOS9303", "bios_CD_U"
+	"us_scd2_9306", "SegaCDBIOS9303", "us_scd1_9210", "bios_CD_U"
 };
 static const char * const biosfiles_eu[] = {
-	"eu_mcd1_9210", "eu_mcd2_9306", "eu_mcd2_9303", "bios_CD_E"
+	"eu_mcd2_9306", "eu_mcd2_9303", "eu_mcd1_9210", "bios_CD_E"
 };
 static const char * const biosfiles_jp[] = {
-	"jp_mcd1_9112", "jp_mcd1_9111", "bios_CD_J"
+	"jp_mcd2_921222", "jp_mcd1_9112", "jp_mcd1_9111", "bios_CD_J"
 };
 
 static void make_system_path(char *buf, size_t buf_size,
@@ -704,7 +706,7 @@ bool retro_load_game(const struct retro_game_info *info)
 	PicoWriteSound = snd_write;
 	memset(sndBuffer, 0, sizeof(sndBuffer));
 	PsndOut = sndBuffer;
-	PsndRerate(1);
+	PsndRerate(0);
 
 	return true;
 }
@@ -798,6 +800,24 @@ static void update_variables(void)
 	var.key = "picodrive_input2";
 	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 		PicoSetInputDevice(1, input_name_to_val(var.value));
+
+	var.value = NULL;
+	var.key = "picodrive_sprlim";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		if (strcmp(var.value, "enabled") == 0)
+			PicoOpt |= POPT_DIS_SPRITE_LIM;
+		else
+			PicoOpt &= ~POPT_DIS_SPRITE_LIM;
+	}
+
+	var.value = NULL;
+	var.key = "picodrive_ramcart";
+	if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value) {
+		if (strcmp(var.value, "enabled") == 0)
+			PicoOpt |= POPT_EN_MCD_RAMCART;
+		else
+			PicoOpt &= ~POPT_EN_MCD_RAMCART;
+	}
 
 #ifdef DRC_SH2
 	var.value = NULL;

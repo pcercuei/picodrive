@@ -33,6 +33,8 @@
 
 #include <pico/pico_int.h>
 
+#define LAYER_MEM_SIZE (320*240*2 * 4)
+
 static struct vout_fbdev *main_fb, *layer_fb;
 // g_layer_* - in use, g_layer_c* - configured custom
 int g_layer_cx, g_layer_cy, g_layer_cw, g_layer_ch;
@@ -269,6 +271,8 @@ static int pnd_setup_layer_(int fd, int enabled, int x, int y, int w, int h)
 {
 	struct omapfb_plane_info pi;
 	struct omapfb_mem_info mi;
+	int is_enabled;
+	int retval = 0;
 	int ret;
 
 	ret = ioctl(fd, OMAPFB_QUERY_PLANE, &pi);
@@ -284,18 +288,27 @@ static int pnd_setup_layer_(int fd, int enabled, int x, int y, int w, int h)
 	}
 
 	/* must disable when changing stuff */
-	if (pi.enabled) {
+	is_enabled = pi.enabled;
+	if (is_enabled) {
 		pi.enabled = 0;
 		ret = ioctl(fd, OMAPFB_SETUP_PLANE, &pi);
 		if (ret != 0)
 			perror("SETUP_PLANE");
+		else
+			is_enabled = 0;
 	}
 
-	mi.size = 320*240*2*4;
-	ret = ioctl(fd, OMAPFB_SETUP_MEM, &mi);
-	if (ret != 0) {
-		perror("SETUP_MEM");
-		return -1;
+	if (mi.size < LAYER_MEM_SIZE) {
+		unsigned int size_old = mi.size;
+
+		mi.size = LAYER_MEM_SIZE;
+		ret = ioctl(fd, OMAPFB_SETUP_MEM, &mi);
+		if (ret != 0) {
+			perror("SETUP_MEM");
+			fprintf(stderr, "(requested %u, had %u)\n",
+				mi.size, size_old);
+			return -1;
+		}
 	}
 
 	pi.pos_x = x;
@@ -305,12 +318,17 @@ static int pnd_setup_layer_(int fd, int enabled, int x, int y, int w, int h)
 	pi.enabled = enabled;
 
 	ret = ioctl(fd, OMAPFB_SETUP_PLANE, &pi);
-	if (ret != 0) {
+	if (ret == 0) {
+		is_enabled = pi.enabled;
+	}
+	else {
 		perror("SETUP_PLANE");
-		return -1;
+		retval = -1;
 	}
 
-	return 0;
+	plat_target_switch_layer(1, is_enabled);
+
+	return retval;
 }
 
 int pnd_setup_layer(int enabled, int x, int y, int w, int h)
@@ -508,6 +526,9 @@ void plat_init(void)
 	g_menubg_src_ptr = temp_frame;
 
 	pnd_menu_init();
+
+	// default ROM path
+	strcpy(rom_fname_loaded, "/media");
 
 	in_evdev_init(&pandora_evdev_pdata);
 	in_probe();

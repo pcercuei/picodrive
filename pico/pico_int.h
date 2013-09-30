@@ -51,6 +51,9 @@ extern struct Cyclone PicoCpuCM68k, PicoCpuCS68k;
 #define SekIsStoppedS68k() (PicoCpuCS68k.state_flags&1)
 #define SekShouldInterrupt() (PicoCpuCM68k.irq > (PicoCpuCM68k.srh&7))
 
+#define SekNotPolling     PicoCpuCM68k.not_pol
+#define SekNotPollingS68k PicoCpuCS68k.not_pol
+
 #define SekInterrupt(i) PicoCpuCM68k.irq=i
 #define SekIrqLevel     PicoCpuCM68k.irq
 
@@ -78,6 +81,9 @@ extern M68K_CONTEXT PicoCpuFM68k, PicoCpuFS68k;
 #define SekIsStoppedM68k() (PicoCpuFM68k.execinfo&FM68K_HALTED)
 #define SekIsStoppedS68k() (PicoCpuFS68k.execinfo&FM68K_HALTED)
 #define SekShouldInterrupt() fm68k_would_interrupt()
+
+#define SekNotPolling     PicoCpuFM68k.not_polling
+#define SekNotPollingS68k PicoCpuFS68k.not_polling
 
 #define SekInterrupt(irq) PicoCpuFM68k.interrupts[0]=irq
 #define SekIrqLevel       PicoCpuFM68k.interrupts[0]
@@ -108,6 +114,9 @@ extern m68ki_cpu_core PicoCpuMM68k, PicoCpuMS68k;
 #define SekIsStoppedS68k() (PicoCpuMS68k.stopped==STOP_LEVEL_STOP)
 #define SekShouldInterrupt() (CPU_INT_LEVEL > FLAG_INT_MASK)
 
+#define SekNotPolling     PicoCpuMM68k.not_polling
+#define SekNotPollingS68k PicoCpuMS68k.not_polling
+
 #define SekInterrupt(irq) { \
 	void *oldcontext = m68ki_cpu_p; \
 	m68k_set_context(&PicoCpuMM68k); \
@@ -134,8 +143,6 @@ extern unsigned int SekCycleAim;
 #define SekCyclesBurn(c)    SekCycleCnt += c
 #define SekCyclesBurnRun(c) { \
   SekCyclesLeft -= c; \
-  if (SekCyclesLeft < 0) \
-    SekCyclesLeft = 0; \
 }
 
 // note: sometimes may extend timeslice to delay an irq
@@ -300,7 +307,7 @@ struct PicoMisc
   unsigned char sram_reg;      // 09 SRAM reg. See SRR_* below
   unsigned short z80_bank68k;  // 0a
   unsigned short pad0;
-  unsigned char  pad1;
+  unsigned char  ncart_in;     // 0e !cart_in
   unsigned char  z80_reset;    // 0f z80 reset held
   unsigned char  padDelay[2];  // 10 gamepad phase time outs, so we count a delay
   unsigned short eeprom_addr;  // EEPROM address register
@@ -369,7 +376,8 @@ struct PicoSRAM
 // MCD
 #include "cd/cd_sys.h"
 #include "cd/LC89510.h"
-#include "cd/gfx_cd.h"
+
+#define PCM_MIXBUF_LEN ((12500000 / 384) / 50 + 1)
 
 struct mcd_pcm
 {
@@ -377,7 +385,7 @@ struct mcd_pcm
 	unsigned char enabled; // reg8
 	unsigned char cur_ch;
 	unsigned char bank;
-	int pad1;
+	unsigned int update_cycles;
 
 	struct pcm_chan			// 08, size 0x10
 	{
@@ -437,7 +445,10 @@ typedef struct
 	CDD  cdd;
 	CDC  cdc;
 	_scd scd;
-	Rot_Comp rot_comp;
+	int pcm_mixbuf[PCM_MIXBUF_LEN * 2];
+	int pcm_mixpos;
+	char pcm_mixbuf_dirty;
+	char pcm_regs_dirty;
 } mcd_state;
 
 // XXX: this will need to be reworked for cart+cd support.
@@ -445,6 +456,7 @@ typedef struct
 
 // 32X
 #define P32XS_FM    (1<<15)
+#define P32XS_nCART (1<< 8)
 #define P32XS_REN   (1<< 7)
 #define P32XS_nRES  (1<< 1)
 #define P32XS_ADEN  (1<< 0)
@@ -598,8 +610,22 @@ void PicoWrite16_io(unsigned int a, unsigned int d);
 // pico/memory.c
 PICO_INTERNAL void PicoMemSetupPico(void);
 
+// cd/gfx.c
+void gfx_init(void);
+void gfx_start(unsigned int base);
+void gfx_update(unsigned int cycles);
+int gfx_context_save(unsigned char *state);
+int gfx_context_load(const unsigned char *state);
+
+// cd/gfx_dma.c
+void DmaSlowCell(unsigned int source, unsigned int a, int len, unsigned char inc);
+
 // cd/memory.c
 PICO_INTERNAL void PicoMemSetupCD(void);
+unsigned int PicoRead8_mcd_io(unsigned int a);
+unsigned int PicoRead16_mcd_io(unsigned int a);
+void PicoWrite8_mcd_io(unsigned int a, unsigned int d);
+void PicoWrite16_mcd_io(unsigned int a, unsigned int d);
 void pcd_state_loaded_mem(void);
 
 // pico.c
@@ -640,7 +666,15 @@ void pcd_event_schedule(unsigned int now, enum pcd_event event, int after);
 void pcd_event_schedule_s68k(enum pcd_event event, int after);
 unsigned int pcd_cycles_m68k_to_s68k(unsigned int c);
 int  pcd_sync_s68k(unsigned int m68k_target, int m68k_poll_sync);
+void pcd_run_cpus(int m68k_cycles);
+void pcd_soft_reset(void);
 void pcd_state_loaded(void);
+
+// cd/pcm.c
+void pcd_pcm_sync(unsigned int to);
+void pcd_pcm_update(int *buffer, int length, int stereo);
+void pcd_pcm_write(unsigned int a, unsigned int d);
+unsigned int pcd_pcm_read(unsigned int a);
 
 // pico/pico.c
 PICO_INTERNAL void PicoInitPico(void);

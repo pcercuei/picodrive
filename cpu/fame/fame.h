@@ -125,6 +125,7 @@ typedef struct
 
 	unsigned int   Opcode;
 	signed int     cycles_needed;
+
 	unsigned short *PC;
 	unsigned long  BasePC;
 	unsigned int   flag_C;
@@ -135,6 +136,9 @@ typedef struct
 	unsigned int   flag_T;
 	unsigned int   flag_S;
 	unsigned int   flag_I;
+
+	unsigned char  not_polling;
+	unsigned char  pad[3];
 
 	unsigned long  Fetch[M68K_FETCHBANK1];
 } M68K_CONTEXT;
@@ -148,7 +152,7 @@ extern M68K_CONTEXT *g_m68kcontext;
 /* General purpose functions */
 void fm68k_init(void);
 int  fm68k_reset(void);
-int  fm68k_emulate(int n, int dualcore, int idle_mode);
+int  fm68k_emulate(int n, int idle_mode);
 int  fm68k_would_interrupt(void); // to be called from fm68k_emulate()
 
 unsigned fm68k_get_pc(M68K_CONTEXT *context);

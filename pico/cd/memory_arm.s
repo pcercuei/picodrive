@@ -11,10 +11,10 @@
 .text
 .align 2
 
-.global PicoReadM68k8_io
-.global PicoReadM68k16_io
-.global PicoWriteM68k8_io
-.global PicoWriteM68k16_io
+.global PicoRead8_mcd_io
+.global PicoRead16_mcd_io
+.global PicoWrite8_mcd_io
+.global PicoWrite16_mcd_io
 
 .global PicoReadS68k8_pr
 .global PicoReadS68k16_pr
@@ -53,9 +53,10 @@
 .extern m68k_reg_write8
 .extern s68k_reg_read16
 .extern s68k_reg_write8
+.extern s68k_reg_write16
 .extern s68k_poll_detect
-.extern gfx_cd_read
-.extern gfx_cd_write16
+.extern pcd_pcm_write
+.extern pcd_pcm_read
 .extern PicoCpuCS68k
 .extern PicoRead8_io
 .extern PicoRead16_io
@@ -134,7 +135,7 @@ PicoReadM68k8_cell1:                    @ 0x220000 - 0x23ffff, cell arranged
     bx      lr
 
 
-PicoReadM68k8_io:
+PicoRead8_mcd_io:
     and     r1, r0, #0xff00
     cmp     r1, #0x2000	              @ a120xx?
     bne     PicoRead8_io
@@ -244,7 +245,7 @@ PicoReadM68k16_cell1:                   @ 0x220000 - 0x23ffff, cell arranged
     bx      lr
 
 
-PicoReadM68k16_io:
+PicoRead16_mcd_io:
     and     r1, r0, #0xff00
     cmp     r1, #0x2000	              @ a120xx
     bne     PicoRead16_io
@@ -335,7 +336,7 @@ PicoWriteM68k8_cell1:                   @ 0x220000 - 0x23ffff, cell arranged
     bx      lr
 
 
-PicoWriteM68k8_io:
+PicoWrite8_mcd_io:
     and     r2, r0, #0xff00
     cmp     r2, #0x2000                 @ a120xx?
     beq     m68k_reg_write8
@@ -362,7 +363,7 @@ PicoWriteM68k16_cell1:                   @ 0x220000 - 0x23ffff, cell arranged
     bx      lr
 
 
-PicoWriteM68k16_io:
+PicoWrite16_mcd_io:
     and     r2, r0, #0xff00
     cmp     r2, #0x2000                 @ a120xx?
     bne     PicoWrite16_io
@@ -418,14 +419,9 @@ m_s68k_read8_regs:
     sub     r2, r0, #0x0e
     cmp     r2, #(0x30-0x0e)
     blo     m_s68k_read8_comm
-    sub     r2, r0, #0x58
-    cmp     r2, #0x10
-    ldrlo   r2, =gfx_cd_read
-    ldrhs   r2, =s68k_reg_read16
     stmfd   sp!,{r0,lr}
     bic     r0, r0, #1
-    mov     lr, pc
-    bx      r2
+    bl      s68k_reg_read16
     ldmfd   sp!,{r1,lr}
     tst     r1, #1
     moveq   r0, r0, lsr #8
@@ -437,6 +433,7 @@ m_s68k_read8_comm:
     ldr     r1, [r1]
     add     r1, r1, #0x110000
     ldrb    r1, [r1, r0]
+    bic     r0, r0, #1
     b       s68k_poll_detect
 
 
@@ -447,23 +444,15 @@ m_s68k_read8_pcm:
     @ must not trash r3 and r12
     ldr     r1, =(Pico+0x22200)
     bic     r0, r0, #0xff0000
-@    bic     r0, r0, #0x008000
     ldr     r1, [r1]
     mov     r2, #0x110000
     orr     r2, r2, #0x002200
     cmp     r0, #0x2000
     bge     m_s68k_read8_pcm_ram
     cmp     r0, #0x20
-    movlt   r0, #0
-    bxlt    lr
-    orr     r2, r2, #(0x48+8)           @ pcm.ch + addr_offset
-    add     r1, r1, r2
-    and     r2, r0, #0x1c
-    ldr     r1, [r1, r2, lsl #2]
-    tst     r0, #2
-    moveq   r0, r1, lsr #PCM_STEP_SHIFT
-    movne   r0, r1, lsr #(PCM_STEP_SHIFT+8)
-    and     r0, r0, #0xff
+    movge   r0, r0, lsr #1
+    bge     pcd_pcm_read
+    mov     r0, #0
     bx      lr
 
 m_s68k_read8_pcm_ram:
@@ -509,9 +498,6 @@ m_s68k_read16_regs:
     bic     r0, r0, #0xff0000
     bic     r0, r0, #0x008000
     bic     r0, r0, #0x000001
-    sub     r2, r0, #0x58
-    cmp     r2, #0x10
-    blo     gfx_cd_read
     cmp     r0, #8
     bne     s68k_reg_read16
     mov     r0, #1
@@ -586,12 +572,12 @@ m_s68k_write8_regs:
     tst     r0, #0x7e00
     movne   r0, #0
     bxne    lr
-    sub     r2, r0, #0x58
-    cmp     r2, #0x10
+    sub     r2, r0, #0x59
+    cmp     r2, #0x0f
     bhs     s68k_reg_write8
     bic     r0, r0, #1
     orr     r1, r1, r1, lsl #8
-    b       gfx_cd_write16
+    b       s68k_reg_write16
 
 
 m_s68k_write8_pcm:
@@ -600,7 +586,7 @@ m_s68k_write8_pcm:
     bic     r0, r0, #0xff0000
     cmp     r0, #0x12
     movlt   r0, r0, lsr #1
-    blt     pcm_write
+    blt     pcd_pcm_write
 
     cmp     r0, #0x2000
     bxlt    lr
@@ -703,17 +689,7 @@ m_s68k_write16_regs:
     movne   r0, #0
     bxne    lr
     cmp     r0, #0x0e
-    beq     m_s68k_write16_regs_spec
-    sub     r2, r0, #0x58
-    cmp     r2, #0x10
-    blo     gfx_cd_write16
-    and     r3, r1, #0xff
-    add     r2, r0, #1
-    stmfd   sp!,{r2,r3,lr}
-    mov     r1, r1, lsr #8
-    bl      s68k_reg_write8
-    ldmfd   sp!,{r0,r1,lr}
-    b       s68k_reg_write8
+    bne     s68k_reg_write16
 
 m_s68k_write16_regs_spec:               @ special case
     ldr     r2, =(Pico+0x22200)

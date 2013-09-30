@@ -90,8 +90,14 @@ static int SekTasCallback(void)
 #ifdef EMU_F68K
 static void SekIntAckF68K(unsigned level)
 {
-  if     (level == 4) { Pico.video.pending_ints  =  0;    elprintf(EL_INTS, "hack: @ %06x [%i]", SekPc, SekCycleCnt); }
-  else if(level == 6) { Pico.video.pending_ints &= ~0x20; elprintf(EL_INTS, "vack: @ %06x [%i]", SekPc, SekCycleCnt); }
+  if     (level == 4) {
+    Pico.video.pending_ints = 0;
+    elprintf(EL_INTS, "hack: @ %06x [%i]", SekPc, SekCyclesDone());
+  }
+  else if(level == 6) {
+    Pico.video.pending_ints &= ~0x20;
+    elprintf(EL_INTS, "vack: @ %06x [%i]", SekPc, SekCyclesDone());
+  }
   PicoCpuFM68k.interrupts[0] = 0;
 }
 #endif
@@ -170,7 +176,7 @@ void SekStepM68k(void)
 #elif defined(EMU_M68K)
   SekCycleCnt+=m68k_execute(1);
 #elif defined(EMU_F68K)
-  SekCycleCnt+=fm68k_emulate(1, 0, 0);
+  SekCycleCnt+=fm68k_emulate(1, 0);
 #endif
 }
 
@@ -311,7 +317,7 @@ void SekInitIdleDet(void)
   CycloneInitIdle();
 #endif
 #ifdef EMU_F68K
-  fm68k_emulate(0, 0, 1);
+  fm68k_emulate(0, 1);
 #endif
 }
 
@@ -419,7 +425,7 @@ void SekFinishIdleDet(void)
   CycloneFinishIdle();
 #endif
 #ifdef EMU_F68K
-  fm68k_emulate(0, 0, 2);
+  fm68k_emulate(0, 2);
 #endif
   while (idledet_count > 0)
   {
