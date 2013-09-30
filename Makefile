@@ -4,7 +4,8 @@ CFLAGS += -I.
 ifdef DEBUG
 CFLAGS += -ggdb
 else
-CFLAGS += -O2 -DNDEBUG
+CFLAGS += -O2 -DNDEBUG -ffunction-sections
+LDFLAGS += -Wl,--gc-sections
 endif
 #CFLAGS += -DEVT_LOG
 #CFLAGS += -DDRC_CMP
